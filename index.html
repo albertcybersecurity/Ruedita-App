@@ -122,7 +122,7 @@
 <footer class="footer"><div class="wrap footerGrid"><div><h3>Ruedita App</h3><p>Plataforma digital para organizar rueditas, pasamanos y mesas de ahorro comunitario en pesos argentinos.</p></div><div><p><b>Creador:</b> Albert Security Digital © 2026</p><p><b>Web:</b> albertsecuritydigital.com<br><b>Email:</b> albert.cybersecurity@gmail.com<br><b>WhatsApp:</b> +54 9 11 2515 3541</p></div></div></footer>
 </main>
 
-<main id="auth" class="panel"><div class="auth"><h2>Acceso</h2><div class="tabs"><button id="tabLogin" class="on" onclick="setAuth('login')">Ingresar</button><button id="tabReg" onclick="setAuth('reg')">Registro</button></div><form id="loginForm" class="form" onsubmit="login(event)"><label>Email</label><input id="le" type="email" required><label>Contraseña</label><input id="lp" type="password" required><button class="btn sky">Entrar</button><button type="button" class="btn ghost" onclick="showPublic()">Volver</button></form><form id="regForm" class="form hide" onsubmit="signup(event)"><label>Nombre completo</label><input id="rn" required><label>Email</label><input id="re" type="email" required><label>Teléfono</label><input id="rp" required><label>DNI</label><input id="rd"><label>CUIL</label><input id="rc"><label>Contraseña</label><input id="rpass" type="password" minlength="6" required><label style="display:flex;gap:8px;align-items:flex-start"><input id="termsAccept" type="checkbox" required style="width:auto;margin-top:4px"> <span>Acepto términos, bases y condiciones.</span></label><button class="btn sky">Crear cuenta</button><button type="button" class="btn ghost" onclick="showPublic()">Volver</button></form></div></main>
+<main id="auth" class="panel"><div class="auth"><h2>Acceso</h2><div class="tabs"><button id="tabLogin" class="on" onclick="setAuth('login')">Ingresar</button><button id="tabReg" onclick="setAuth('reg')">Registro</button></div><form id="loginForm" class="form" onsubmit="login(event)"><label>Email</label><input id="le" type="email" required><label>Contraseña</label><input id="lp" type="password" required><button class="btn sky">Entrar</button><button type="button" class="btn light" onclick="openForgotPassword()">Olvidé mi contraseña</button><button type="button" class="btn ghost" onclick="showPublic()">Volver</button></form><form id="regForm" class="form hide" onsubmit="signup(event)"><label>Nombre completo</label><input id="rn" required><label>Email</label><input id="re" type="email" required><label>Teléfono</label><input id="rp" required><label>DNI</label><input id="rd"><label>CUIL</label><input id="rc"><label>Contraseña</label><input id="rpass" type="password" minlength="6" required><label style="display:flex;gap:8px;align-items:flex-start"><input id="termsAccept" type="checkbox" required style="width:auto;margin-top:4px"> <span>Acepto términos, bases y condiciones.</span></label><button class="btn sky">Crear cuenta</button><button type="button" class="btn ghost" onclick="showPublic()">Volver</button></form></div></main>
 
 <main id="dash" class="panel"><div class="dash"><aside class="side"><div class="me"><div id="av" class="av">U</div><div><b id="sideName">Usuario</b><br><small id="sideRole"></small></div></div><button class="sbtn on" onclick="page('home',this)">🏠 Inicio</button><button class="sbtn" onclick="page('profile',this)">👤 Mi perfil</button><button class="sbtn" onclick="page('wallet',this)">💰 Saldo</button><button class="sbtn" onclick="page('tables',this)">🎡 Mesas</button><button class="sbtn" onclick="page('payments',this)">🧾 Cuotas</button><button class="sbtn adminOnly hide" onclick="page('admin',this)">👑 Admin</button><button class="sbtn adminOnly hide" onclick="page('reports',this)">📊 Reportes</button><button class="sbtn" onclick="logout()">🚪 Salir</button></aside><section class="content"><div id="pc"></div></section></div></main>
 
@@ -144,12 +144,24 @@ function readySB(){
 }
 function money(n){return "$"+Number(n||0).toLocaleString("es-AR")}function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]))}function msg(t){toast.textContent=t;toast.classList.add("on");setTimeout(()=>toast.classList.remove("on"),3000)}function show(id){document.querySelectorAll(".panel").forEach(p=>p.classList.remove("on"));document.getElementById(id).classList.add("on")}function showPublic(){show("public");logoutTop.classList.add("hide")}function auth(t="login"){show("auth");setAuth(t)}function setAuth(t){loginForm.classList.toggle("hide",t!=="login");regForm.classList.toggle("hide",t!=="reg");tabLogin.classList.toggle("on",t==="login");tabReg.classList.toggle("on",t==="reg")}function go(i){document.getElementById(i)?.scrollIntoView({behavior:"smooth"})}function closeM(){modal.classList.remove("on");modal.style.display="none"}modal.onclick=e=>{if(e.target.id==="modal")closeM()}
 function toggleBot(){botPanel.classList.toggle("on")}function botAsk(q){let a={que:"Una Ruedita es un pasamanos: varias personas aportan y una cobra el pozo por turnos.",pago:"Entrá en Saldo, pagá al Alias/CVU, subí comprobante y administración acredita.",niveles:"Subís de nivel completando mesas sin atrasos. Bronce 3, Plata 8, Oro 15, Platinum 25.",cortesia:"Saldo de cortesía es saldo virtual que admin acredita como bono o ajuste; queda separado en balance."}[q]||"Te ayudo desde el panel.";botMsgs.innerHTML+=`<div class="bubble you">${q}</div><div class="bubble bot">${a}</div>`;botMsgs.scrollTop=botMsgs.scrollHeight}
-async function init(){if(!readySB())return;let r=await sb.auth.getSession();session=r.data.session;if(session) await loadMe(); else showPublic()}
+async function init(){
+  if(!readySB())return;
+  let r=await sb.auth.getSession();
+  session=r.data.session;
+  const hash = location.hash || "";
+  if(session && hash.includes("type=recovery")){
+    showPublic();
+    setTimeout(openResetNewPassword,500);
+    return;
+  }
+  if(session) await loadMe(); else showPublic();
+}
 async function loadMe(){if(!readySB())return;let r=await sb.from("profiles").select("*").eq("id",session.user.id).single();if(r.error){msg(r.error.message);auth("login");return}me=r.data;sideName.textContent=me.full_name||me.email;sideRole.textContent=(me.is_admin?"Admin":"Usuario")+" · "+me.kyc_status+" · "+me.level;av.textContent=(me.full_name||me.email||"U")[0].toUpperCase();document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hide",!me.is_admin));logoutTop.classList.remove("hide");show("dash");page("home")}
 async function signup(e){e.preventDefault();if(!readySB())return;let r=await sb.auth.signUp({email:re.value.trim(),password:rpass.value,options:{data:{full_name:rn.value.trim()}}});if(r.error)return msg(r.error.message==="Failed to fetch"?"No se pudo conectar. Revisá internet o volvé a cargar la página.":r.error.message);if(r.data.user)await sb.from("profiles").update({full_name:rn.value,phone:rp.value,dni:rd.value,cuil:rc.value}).eq("id",r.data.user.id);msg("Cuenta creada. Si pide confirmar email, revisá tu correo.");setAuth("login")}
 async function login(e){e.preventDefault();if(!readySB())return;let r=await sb.auth.signInWithPassword({email:le.value.trim(),password:lp.value});if(r.error)return msg(r.error.message==="Failed to fetch"?"No se pudo conectar. Revisá internet o volvé a cargar la página.":r.error.message);session=r.data.session;await loadMe()}async function logout(){if(sb)await sb.auth.signOut();session=null;me=null;showPublic()}
 function setNav(b){document.querySelectorAll(".sbtn").forEach(x=>x.classList.remove("on"));if(b)b.classList.add("on")}function page(p,b){setNav(b);if(p==="home")home();if(p==="profile")profile();if(p==="wallet")wallet();if(p==="tables")tables();if(p==="payments")payments();if(p==="admin")admin();if(p==="reports")reports()}
 async function home(){let [deps,txs,parts]=await Promise.all([sb.from("deposits").select("*").eq("user_id",me.id),sb.from("wallet_transactions").select("*").eq("user_id",me.id).order("created_at",{ascending:false}).limit(8),sb.from("ruedita_participants").select("*,rueditas(*)").eq("user_id",me.id)]);pc.innerHTML=`<div class=k>Panel principal</div><h2>Hola, ${esc(me.full_name||me.email)}</h2><div class="grid g4"><div class=stat><span>Saldo</span><strong>${money(me.balance)}</strong><small>ARS</small></div><div class=stat><span>Nivel</span><strong>${esc(me.level)}</strong><small>${esc(me.kyc_status)}</small></div><div class=stat><span>Depósitos</span><strong>${deps.data?.length||0}</strong><small>Solicitudes</small></div><div class=stat><span>Mis mesas</span><strong>${parts.data?.length||0}</strong><small>Participaciones</small></div></div>${me.kyc_status!=="Verificado"?'<div class="alertBox" style="margin-top:18px"><strong>🪪 Falta verificar identidad</strong><p>Subí DNI y selfie en Mi perfil.</p></div>':''}<div class="grid g2" style="margin-top:18px"><div class=card><h3>Cómo usar</h3><p><b>1.</b> Verificá identidad.<br><b>2.</b> Cargá saldo y comprobante.<br><b>3.</b> Admin aprueba.<br><b>4.</b> Entrá a una mesa.</p></div><div class=card><h3>Últimos movimientos</h3>${txs.data?.length?txs.data.map(t=>`<p><b>${esc(t.type)}</b><br>${money(t.amount)} · <small>${new Date(t.created_at).toLocaleString("es-AR")}</small><br><small>${esc(t.description)}</small></p>`).join(""):"<p>Sin movimientos.</p>"}</div></div>`}
+
 
 
 async function openChangePassword(){
@@ -181,18 +193,62 @@ async function changeOwnPassword(e){
   closeM();
   msg("Contraseña actualizada correctamente.");
 }
+function openForgotPassword(){
+  mb.innerHTML=`<h2>Recuperar contraseña</h2>
+  <p style="color:#64748b;line-height:1.55">Ingresá tu email y te enviaremos un enlace para crear una nueva contraseña.</p>
+  <form class=form onsubmit="sendForgotPassword(event)">
+    <label>Email</label>
+    <input id=fpEmail type=email required placeholder="tu@email.com">
+    <button class="btn sky">Enviar recuperación</button>
+    <button type="button" class="btn ghost" onclick="closeM()">Cancelar</button>
+  </form>`;
+  modal.classList.add("on");
+  modal.style.display="flex";
+}
+async function sendForgotPassword(e){
+  e.preventDefault();
+  const email = fpEmail.value.trim();
+  const redirectTo = location.origin + location.pathname;
+  const r = await sb.auth.resetPasswordForEmail(email,{redirectTo});
+  if(r.error)return msg(r.error.message);
+  closeM();
+  msg("Te enviamos el enlace de recuperación.");
+}
+function openResetNewPassword(){
+  mb.innerHTML=`<h2>Nueva contraseña</h2>
+  <p style="color:#64748b;line-height:1.55">Escribí tu nueva contraseña para completar la recuperación.</p>
+  <form class=form onsubmit="saveRecoveredPassword(event)">
+    <label>Nueva contraseña</label>
+    <input id=recoveredPass type=password required minlength=6 autocomplete="new-password">
+    <label>Repetir nueva contraseña</label>
+    <input id=recoveredPass2 type=password required minlength=6 autocomplete="new-password">
+    <button class="btn sky">Guardar contraseña</button>
+  </form>`;
+  modal.classList.add("on");
+  modal.style.display="flex";
+}
+async function saveRecoveredPassword(e){
+  e.preventDefault();
+  if(recoveredPass.value !== recoveredPass2.value)return msg("Las contraseñas no coinciden.");
+  const r = await sb.auth.updateUser({password:recoveredPass.value});
+  if(r.error)return msg(r.error.message);
+  closeM();
+  msg("Contraseña restablecida. Ya podés ingresar.");
+  await sb.auth.signOut();
+  session=null;me=null;auth("login");
+}
 function openAdminPasswordHelp(email){
   mb.innerHTML=`<h2>Contraseña de usuario</h2>
   <p style="color:#475569;line-height:1.6">Como admin podés enviar recuperación de contraseña al usuario. Por seguridad no se escribe una clave nueva desde el HTML público.</p>
-  <div class="adminWarn"><b>Usuario:</b><br>${esc(email)}<br><br>El usuario recibirá un enlace para restablecer su contraseña.</div>
+  <div class="adminWarn"><b>Usuario:</b><br>${esc(email)}<br><br>El usuario recibirá un enlace para crear una nueva contraseña.</div>
   <br>
-  <button class="btn sky" onclick="sendPasswordReset('${email}')">Enviar recuperación</button>
+  <button class="btn sky" onclick="sendAdminPasswordReset('${email}')">Enviar recuperación</button>
   <button class="btn light" onclick="copyText('${email}')">Copiar email</button>
   <button class="btn ghost" onclick="closeM()">Cerrar</button>`;
   modal.classList.add("on");
   modal.style.display="flex";
 }
-async function sendPasswordReset(email){
+async function sendAdminPasswordReset(email){
   const redirectTo = location.origin + location.pathname;
   const r = await sb.auth.resetPasswordForEmail(email,{redirectTo});
   if(r.error)return msg(r.error.message);
