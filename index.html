@@ -374,7 +374,55 @@ function calcOps(t){const amount=Number(t?.amount||0),cupos=Number(t?.participan
 async function getMesaLiveData(id){const r=await sb.rpc("get_ruedita_live",{p_ruedita_id:id});if(r.error)return{error:r.error.message,participants:[]};return r.data||{participants:[]}}
 function fallbackBoardTurn(t){const cupos=Math.max(1,Number(t?.participants_limit||10));const seed=(t?.id||"ruedita").split("").reduce((a,c)=>a+c.charCodeAt(0),0);return String((seed%cupos)+1).padStart(2,"0")}
 function turnRows(people,current){if(!people.length)return `<tr><td colspan="5">Todavía no hay participantes. Cuando se unan, aparecerán acá con datos reales.</td></tr>`;return people.map((p,i)=>{const tn=p.turn_number?String(p.turn_number).padStart(2,"0"):"—",isCurrent=String(tn)===String(current),status=p.turn_number?(p.payout_credited?"Cobrado":"Turno asignado"):"En fila";return `<tr class="${isCurrent?'current':''}"><td><span class="turnNo ${isCurrent?'current':''}">${tn}</span></td><td>${esc(p.full_name||p.email||"Usuario")}</td><td>${esc(p.level||"Básico")}</td><td><span class="statusChip ${p.payout_credited?'good':p.turn_number?'warn':''}">${status}</span></td><td>${p.payout_date?new Date(p.payout_date+"T00:00:00").toLocaleDateString("es-AR"):"-"}</td></tr>`}).join("")}
-function renderOpsBoard(t,live){const m=calcOps(t),people=live?.participants||[],assigned=people.find(p=>p.turn_number&&!p.payout_credited)||people.find(p=>p.turn_number)||null,current=assigned?.turn_number?String(assigned.turn_number).padStart(2,"0"):fallbackBoardTurn(t),pct=m.cupos?Math.min(100,Math.round((people.length/m.cupos)*100)):0;return `<div class="opsBoard"><div class="opsBoardHead"><div class="opsBoardTitle"><b>${esc(t.title)}</b><small>${esc(t.privacy)} · ${people.length}/${m.cupos} cupos · ${esc(t.status)}</small></div><div class="turnMega"><span>Turno actual</span><strong>${current}</strong><em>${assigned?"PASE A COBRAR":"EN ESPERA"}</em></div></div><div class="opsStats"><div class="opsStat"><span>Pozo bruto</span><b>${money(m.gross)}</b></div><div class="opsStat"><span>Cuota</span><b>${money(m.amount)}</b></div><div class="opsStat"><span>Comisión</span><b>${m.feePct}%</b></div><div class="opsStat"><span>Cupos</span><b>${people.length}/${m.cupos}</b></div></div><div class="opsProgress"><i style="width:${pct}%"></i></div><div class="turnTableWrap"><table class="turnTable"><thead><tr><th>Turno</th><th>Participante</th><th>Nivel</th><th>Estado</th><th>Cobro</th></tr></thead><tbody>${turnRows(people,current)}</tbody></table></div><div class="opsActions"><button class="btn sky" onclick="joinTable('${t.id}')">Unirme</button><button class="btn light" onclick="newTable()">Crear mesa</button><button class="btn light" onclick="showMyTurnOps('${t.id}')">Ver mi turno</button><button class="btn light" onclick="refreshTablesOps()">Actualizar</button></div></div>`}
+
+function isDueDate(dateText){
+  if(!dateText)return false;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const d=new Date(dateText+"T00:00:00"); d.setHours(0,0,0,0);
+  return d<=today;
+}
+function payoutActionButton(t,people){
+  const mine=(people||[]).find(p=>p.user_id===me.id);
+  if(!mine || !mine.turn_number)return `<button class="btn light" onclick="showMyTurnOps('${t.id}')">Ver mi turno</button>`;
+  if(mine.payout_credited)return `<button class="btn green" onclick="showMyTurnOps('${t.id}')">Cobro realizado</button>`;
+  if(!isDueDate(mine.payout_date)){
+    const txt=mine.payout_date?new Date(mine.payout_date+"T00:00:00").toLocaleDateString("es-AR"):"Sin fecha";
+    return `<button class="btn light" onclick="msg('Tu cobro todavía no está disponible. Fecha estimada: ${txt}')">Cobro ${txt}</button>`;
+  }
+  return `<button class="btn gold" onclick="claimMyPayout('${t.id}')">Cobrar ahora</button>`;
+}
+async function claimMyPayout(rueditaId){
+  msg("Procesando cobro...");
+  const r=await sb.rpc("claim_my_payout",{p_ruedita_id:rueditaId});
+  if(r.error){
+    if(String(r.error.message||"").includes("Could not find")){
+      const auto=await sb.rpc("process_due_payouts");
+      if(auto.error)return msg(auto.error.message);
+      await loadMe();
+      await tables();
+      return msg("Cobros vencidos procesados. Revisá tu saldo.");
+    }
+    return msg(r.error.message);
+  }
+  await loadMe();
+  await tables();
+  msg("Cobro acreditado en tu saldo.");
+}
+async function adminProcessPayouts(){
+  if(!confirm("¿Procesar cobros vencidos, garantías y niveles ahora?"))return;
+  try{
+    await sb.rpc("process_due_payouts");
+    await sb.rpc("return_completed_guarantees");
+    await sb.rpc("update_levels_by_history");
+    await loadMe();
+    await tables();
+    msg("Sistema procesado correctamente.");
+  }catch(err){
+    msg("No se pudo procesar: "+err.message);
+  }
+}
+
+function renderOpsBoard(t,live){const m=calcOps(t),people=live?.participants||[],assigned=people.find(p=>p.turn_number&&!p.payout_credited)||people.find(p=>p.turn_number)||null,current=assigned?.turn_number?String(assigned.turn_number).padStart(2,"0"):fallbackBoardTurn(t),pct=m.cupos?Math.min(100,Math.round((people.length/m.cupos)*100)):0;return `<div class="opsBoard"><div class="opsBoardHead"><div class="opsBoardTitle"><b>${esc(t.title)}</b><small>${esc(t.privacy)} · ${people.length}/${m.cupos} cupos · ${esc(t.status)}</small></div><div class="turnMega"><span>Turno actual</span><strong>${current}</strong><em>${assigned?"PASE A COBRAR":"EN ESPERA"}</em></div></div><div class="opsStats"><div class="opsStat"><span>Pozo bruto</span><b>${money(m.gross)}</b></div><div class="opsStat"><span>Cuota</span><b>${money(m.amount)}</b></div><div class="opsStat"><span>Comisión</span><b>${m.feePct}%</b></div><div class="opsStat"><span>Cupos</span><b>${people.length}/${m.cupos}</b></div></div><div class="opsProgress"><i style="width:${pct}%"></i></div><div class="turnTableWrap"><table class="turnTable"><thead><tr><th>Turno</th><th>Participante</th><th>Nivel</th><th>Estado</th><th>Cobro</th></tr></thead><tbody>${turnRows(people,current)}</tbody></table></div><div class="opsActions"><button class="btn sky" onclick="joinTable('${t.id}')">Unirme</button><button class="btn light" onclick="newTable()">Crear mesa</button>${payoutActionButton(t,people)}<button class="btn light" onclick="refreshTablesOps()">Actualizar</button></div></div>`}
 async function showMyTurnOps(id){const live=await getMesaLiveData(id);const mine=(live.participants||[]).find(p=>p.user_id===me.id);if(!mine)return msg("Todavía no estás en esta mesa.");mb.innerHTML=`<h2>Mi turno</h2><div class="opsCard"><h3>${mine.turn_number?"Turno "+String(mine.turn_number).padStart(2,"0"):"Todavía sin sorteo"}</h3><p><b>Estado:</b> ${esc(mine.status||"En fila")}<br><b>Fecha estimada:</b> ${mine.payout_date?new Date(mine.payout_date+"T00:00:00").toLocaleDateString("es-AR"):"Se asigna cuando la mesa cierre"}</p></div><button class="btn sky" onclick="closeM()">Entendido</button>`;modal.classList.add("on");modal.style.display="flex"}
 async function refreshTablesOps(){await tables();msg("Tablero actualizado.")}
 async function openWithdraw(){mb.innerHTML=`<h2>Retirar saldo</h2><p style="color:#64748b;line-height:1.55">Ingresá tus datos bancarios. La solicitud queda pendiente para revisión administrativa.</p><form class="form" onsubmit="requestWithdraw(event)"><label>CBU / Alias</label><input id=wd_cbu required placeholder="alias.cuenta o CBU/CVU"><label>Banco</label><input id=wd_bank required placeholder="Banco"><label>Titular</label><input id=wd_holder required placeholder="Nombre del titular"><label>Monto a retirar</label><input id=wd_amount type=number min=1 max="${Number(me?.balance||0)}" required><button class="btn sky">Solicitar retiro</button><button type="button" class="btn ghost" onclick="closeM()">Cancelar</button></form>`;modal.classList.add("on");modal.style.display="flex"}
@@ -385,7 +433,7 @@ async function tables(){
   let r=await sb.from("rueditas").select("*").order("created_at",{ascending:false});
   if(r.error){pc.innerHTML=`<div class="opsShell"><div class="opsTop"><div class="opsBrand"><div class="opsMark">R</div><div><h2>Mesas</h2><p>No se pudieron cargar</p></div></div></div><div class="alertBox"><strong>Error:</strong><p>${esc(r.error.message)}</p></div><button class="btn sky" onclick="newTable()">Crear mesa</button></div>`;return}
   const rows=r.data||[],active=rows.find(x=>x.status==="Abierta")||rows[0],live=active?await getMesaLiveData(active.id):{participants:[]},m=calcOps(active);
-  pc.innerHTML=`<div class="opsShell"><div class="opsTop"><div class="opsBrand"><div class="opsMark">R</div><div><h2>Tablero digital de mesas</h2><p>Datos reales, turnos y cupos en vivo</p></div></div><div class="opsPills"><span class="opsPill live">● En vivo</span><span class="opsPill">Sin imagen estática</span><span class="opsPill">Modo app web</span></div></div><div class="opsGrid"><div>${active?renderOpsBoard(active,live):'<div class="opsCard"><h3>No hay mesas</h3><p>Creá una mesa para iniciar el tablero digital.</p><button class="btn sky" onclick="newTable()">Crear mesa</button></div>'}</div><div class="opsSide"><div class="opsCard"><h3>Resumen financiero</h3><div class="metricLine"><span>Pozo total</span><b>${money(m.gross)}</b></div><div class="metricLine"><span>Pozo neto</span><b>${money(m.net)}</b></div><div class="metricLine"><span>Comisión</span><b>${money(m.fee)} (${m.feePct}%)</b></div><div class="metricLine"><span>Garantía</span><b>${m.noG?"No aplica":money(m.guarantee)}</b></div><div class="metricLine"><span>Retención</span><b>${m.noG?"No aplica":money(m.retention)}</b></div></div><div class="opsCard"><h3>Mi saldo</h3><div class="metricLine"><span>Disponible</span><b>${money(me.balance)}</b></div><button class="btn sky" onclick="openWithdraw()">Retirar saldo</button><button class="btn light" onclick="wallet()">Depositar</button></div></div></div><div class="opsTables"><h3>Todas las mesas</h3><div class=grid g3>${rows.map(t=>tableCard(t)).join("")||"<p>No hay mesas.</p>"}</div></div></div>`;
+  pc.innerHTML=`<div class="opsShell"><div class="opsTop"><div class="opsBrand"><div class="opsMark">R</div><div><h2>Tablero digital de mesas</h2><p>Datos reales, turnos y cupos en vivo</p></div></div><div class="opsPills"><span class="opsPill live">● En vivo</span><span class="opsPill">Sin imagen estática</span><span class="opsPill">Modo app web</span></div></div><div class="opsGrid"><div>${active?renderOpsBoard(active,live):'<div class="opsCard"><h3>No hay mesas</h3><p>Creá una mesa para iniciar el tablero digital.</p><button class="btn sky" onclick="newTable()">Crear mesa</button></div>'}</div><div class="opsSide"><div class="opsCard"><h3>Resumen financiero</h3><div class="metricLine"><span>Pozo total</span><b>${money(m.gross)}</b></div><div class="metricLine"><span>Pozo neto</span><b>${money(m.net)}</b></div><div class="metricLine"><span>Comisión</span><b>${money(m.fee)} (${m.feePct}%)</b></div><div class="metricLine"><span>Garantía</span><b>${m.noG?"No aplica":money(m.guarantee)}</b></div><div class="metricLine"><span>Retención</span><b>${m.noG?"No aplica":money(m.retention)}</b></div></div><div class="opsCard"><h3>Mi saldo</h3><div class="metricLine"><span>Disponible</span><b>${money(me.balance)}</b></div><button class="btn sky" onclick="openWithdraw()">Retirar saldo</button><button class="btn light" onclick="wallet()">Depositar</button></div>${me.is_admin?`<div class="opsCard"><h3>Control admin</h3><p>Procesa cobros vencidos, garantías y niveles.</p><button class="btn gold" onclick="adminProcessPayouts()">Procesar cobros</button></div>`:""}</div></div><div class="opsTables"><h3>Todas las mesas</h3><div class=grid g3>${rows.map(t=>tableCard(t)).join("")||"<p>No hay mesas.</p>"}</div></div></div>`;
 }
 function newTable(){
   mb.innerHTML=`<h2>Crear mesa</h2>
